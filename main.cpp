@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <deque>
 using namespace std;
 
 int iTypeLen = 11;
@@ -15,6 +16,14 @@ bool findAt(int target, int array[], int len){
 int str2int(string s){
   stringstream ss;
   int i;
+  ss << s;
+  ss >> i;
+  ss.clear();
+  return i;
+}
+string int2str(int s){
+  stringstream ss;
+  string i;
   ss << s;
   ss >> i;
   ss.clear();
@@ -38,8 +47,10 @@ int bin2int(string s){
 }
 class Instruction{ // IF, Instruction Fetch
 public:
+  string raw;
   Instruction(string binary){
-    cout << binary << endl;
+    // cout << binary << endl;
+    raw = binary;
     op = bin2int(binary.substr(0, 6));
     if(op==0){ // R type
       type = 0; // R type = 0
@@ -57,11 +68,13 @@ public:
       type = 2; // J type = 2
       immediate = bin2int(binary.substr(6, 26));
     }
-    cout << "OP: " << op << endl;
+    // cout << "OP: " << op << endl;
   }
   int RS(){return rs;}
   int RT(){return rt;}
   int RD(){return rd;}
+  int OP(){return op;}
+  int IMMEDIATE(){return immediate;}
   int RALUS(){return readFromALU;}
   int update(int t, int data){
     int fin = 1;
@@ -75,6 +88,9 @@ public:
     }
     return fin; // if fin==1 information is update successful
   }
+  int OPTYPE(){
+    return type;
+  }
 private:
   int op = 0,
       rs = 0, rt = 0, rd = 0,
@@ -82,7 +98,6 @@ private:
       immediate, type = -1;
   int readFromALU = -1;
   // int schedule = 0; i dont need that anymore
-  string raw;
 };
 string names[4] = {"ID", "EX", "ME", "WB"};
 class processor{
@@ -93,49 +108,98 @@ public:
     return mem[addr/0x4];
   }
   void run(){
-    int data;
-    if(INS.size()==0){
-      // cout << "No instruction to run";
-      return;
-    }
-
-    cout << "Processor is runing..." << endl;
-    for(int i=0;i<5;i++)cout << "---\t";cout << endl;
-    while(PC < INS.size() + 3){
-      PC += 0x01;
-      cout << "PC: " << PC << "\t-\t";
+    int ALUout = 0x00, 
+        offset = 0x00;
+    // cout << "Processor is runing..." << endl;
+    // for(int i=0;i<5;i++)cout << "---\t";cout << endl;
+    while(PC < INSMEM.size() + 3){
+      PC += ( 0x04 ) / 4;
+      // cout << "PC: " << PC << "\t-\t";
       for(int n = 0; n < 4 && n < PC; n++){
+        offset = 0x01;
         int func = ((PC - n - 1) % 4);
         int pc = PC - func - 1;
-        if(pc < INS.size()){
-          cout << names[func] << " " << pc << ",\t";
+        cout << "CC " << PC << ":\n\n";
+        // cout << names[func] << " " << pc << ",\t";
+        if(pc < INSMEM.size()){
+
+          cout << "Registers:\n";
+          for(int i=0; i < 10; i++)cout << "$" << i << ":" << reg[i] << endl;    cout << "\n";
+
+          cout << "Data memory:\n\n";
+          for(int i=0; i < 5; i++)cout << "0x" << hex << i << ":" << mem[i] << endl;    cout << "\n";
+          
           switch(func){
-            case 0: // ID
-              if(pc-1>0)
-                ID(INS[pc], INS[pc-1]);
+            case 0: // IF/ID
+              cout << "IF/ID :\n"
+                   << "PC\t\t" << ((PC/4 + 1) * 4) << "\n"
+                   << "Instruction\t" << INSMEM[pc].raw << "\n";
+              if(pc-1>0){
+                ID(INSMEM[pc], INSMEM[pc-1]);
+                offset += OFFSET(INSMEM[pc]);
+              }
+              if(pc + offset > -1 && pc + offset < trunk.size()){
+                INSMEM.push_back(trunk[pc + offset]);
+              }
             break;
             
-            case 1: // EX
+            case 1: // ID/EX
+              cout << "ID/EX :\n"
+                   << "ReadData1\t" << "" << "\n"
+                   << "ReadData2\t" << "" << "\n"
+                   << "sign_ext\t" << "" << "\n"
+                   << "Rs" << INSMEM[pc].RS() << "\n"
+                   << "Rt" << INSMEM[pc].RT() << "\n"
+                   << "Rd" << INSMEM[pc].RD() << "\n"
+                   << "Control signals " << "000000000"
+                   << endl;
+              if(pc < INSMEM.size())
+                EX(INSMEM[pc]);
+            break;
+            case 2: // EX/MEM
+              cout << "EX/MEM :\n"
+                   << "ALUout\t" << "" << "\n"
+                   << "WriteData\t" << "" << "\n"
+                   << "Rt/Rd\t" << "" << "\n"
+                   << "Control signals " << "00000"
+                   << endl;
+              if(pc < INSMEM.size())
+                MEM(INSMEM[pc]);
             break;
             
-            case 2: // MEM
-            break;
-            
-            case 3: // WB
+            case 3: // MEM/WB
+              cout << "MEM/WB :\n"
+                   << "ReadData\t" << "" << "\n"
+                   << "ALUout\t" << "" << "\n"
+                   << "Rt/Rd\t" << "" << "\n"
+                   << "Control signals " << "00"
+                   << endl;
+              if(pc < INSMEM.size())
+                WB(INSMEM[pc]);
+              // work done
+              // INSMEM.pop_front();
             break;
           
-          }      
+          }
         }
       }
-      cout << endl;
+
+
+
+
+      
+      cout << "=================================================================\n";
     }
-    for(int i=0;i<5;i++)cout << "---\t";cout << endl;
   }
   void addIntruction(Instruction ins){
-    INS.push_back(ins);
+    // INSMEM.push_back(ins);
+    trunk.push_back(ins);
+    if(INSMEM.size()==0)
+      INSMEM.push_back(ins);
   }
 private:
-  vector<Instruction> INS;
+  vector<Instruction> trunk;
+  deque<Instruction> INSMEM;
   int PC = 0x0;
   int reg[10] = {
     0x0000, 0x0009, 0x0005, 0x0007, 0x0001,
@@ -146,11 +210,20 @@ private:
     0x0005, 0x0009, 0x0004, 0x0008, 0x0007
   }; // memory
 
-  int ID(Instruction cur, Instruction pre){ // Instruction decode
+  void ID(Instruction cur, Instruction pre){ // Instruction decode
     int res = pre.RT()==cur.RS()?1:0 +  // update(rs=1, data)
               pre.RT()==cur.RD()?2:0;   // update(rd=2, data)
     if(res>0)cur.update(3, res); // update readFromALU Status
     else cur.update(3, -1);
+  }
+
+  int OFFSET(Instruction ins){
+    // OPTYPE = 0 => R TYPE, = 1 => I TYPE, = 2 => J TYPE
+    int op = ins.OP();
+    if(op==0x000100||op==0x000101){
+      return ins.IMMEDIATE();
+    }
+    return 0;
   }
   void EX(Instruction ins){ // execute
 
@@ -166,25 +239,25 @@ private:
 //, , , , , P, B, z[data hazard], [hazard with load], [branchhazard]
 
 int main(){
-  const int FC = 5;
-  char infile[FC][20] = {"SampleInput.txt", "General.txt", "Datahazard.txt", "Lwhazard.txt", "Branchhazard.txt"};
+  const int FC = 1;
+  char infile[5][20] = {"SampleInput.txt", "General.txt", "Datahazard.txt", "Lwhazard.txt", "Branchhazard.txt"};
   for(int n=0;n<FC;n++){
     ifstream input(infile[n]);
-    string tmp;
+    string binary;
     processor computer;
 
     // for(int i=0;i<n+1;i++){
-    //   Instruction ins("00000000000000000000000000000000");
+    //   Instruction ins("10001101000000010000000000000011");
     //   computer.addIntruction(ins);
     // }
-    while(getline(input, tmp)){
-      Instruction ins(tmp);
+    while(getline(input, binary)){
+      Instruction ins(binary);
       computer.addIntruction(ins);
     }
 
     computer.run(); 
 
-    for(int i=0;i<5;i++)cout << "===\t";cout << endl;
+    // for(int i=0;i<5;i++)cout << "===\t";cout << endl;
   }
   return 0;
 }
