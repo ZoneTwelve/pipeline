@@ -36,7 +36,7 @@ int bin2int(string s){
   }
   return r;
 }
-class Instruction{
+class Instruction{ // IF, Instruction Fetch
 public:
   Instruction(string binary){
     cout << binary << endl;
@@ -94,9 +94,14 @@ public:
   }
   void run(){
     int data;
+    if(INS.size()==0){
+      // cout << "No instruction to run";
+      return;
+    }
+
     cout << "Processor is runing..." << endl;
     for(int i=0;i<5;i++)cout << "---\t";cout << endl;
-    while(PC/4 < INS.size()){
+    while(PC < INS.size() + 3){
       PC += 0x01;
       cout << "PC: " << PC << "\t-\t";
       for(int n = 0; n < 4 && n < PC; n++){
@@ -106,8 +111,8 @@ public:
           cout << names[func] << " " << pc << ",\t";
           switch(func){
             case 0: // ID
-              // if(pc-1>0)
-              //   ID(INS[pc], INS[pc-1]);
+              if(pc-1>0)
+                ID(INS[pc], INS[pc-1]);
             break;
             
             case 1: // EX
@@ -161,19 +166,23 @@ private:
 //, , , , , P, B, z[data hazard], [hazard with load], [branchhazard]
 
 int main(){
-  int FC = 5;
+  const int FC = 5;
   char infile[FC][20] = {"SampleInput.txt", "General.txt", "Datahazard.txt", "Lwhazard.txt", "Branchhazard.txt"};
   for(int n=0;n<FC;n++){
     ifstream input(infile[n]);
     string tmp;
     processor computer;
 
+    // for(int i=0;i<n+1;i++){
+    //   Instruction ins("00000000000000000000000000000000");
+    //   computer.addIntruction(ins);
+    // }
     while(getline(input, tmp)){
       Instruction ins(tmp);
       computer.addIntruction(ins);
     }
 
-    computer.run();
+    computer.run(); 
 
     for(int i=0;i<5;i++)cout << "===\t";cout << endl;
   }
