@@ -4,6 +4,7 @@
 #include <fstream>
 #include <vector>
 #include <deque>
+#include <map>
 using namespace std;
 
 int iTypeLen = 11;
@@ -74,6 +75,8 @@ public:
   int RT(){return rt;}
   int RD(){return rd;}
   int OP(){return op;}
+  int TYPE(){return type;}
+  int FUNCT(){return funct;}
   int IMMEDIATE(){return immediate;}
   int RALUS(){return readFromALU;}
   int update(int t, int data){
@@ -91,6 +94,7 @@ public:
   int OPTYPE(){
     return type;
   }
+  int PC = 0;
 private:
   int op = 0,
       rs = 0, rt = 0, rd = 0,
@@ -102,7 +106,23 @@ private:
 string names[4] = {"ID", "EX", "ME", "WB"};
 class processor{
 public:
-  processor(){}
+  processor(){
+    // I - type
+    controlSignal[0b001100000000] = 0b11000; // and
+    controlSignal[0b001000000000] = 0b00010; // add 
+    // controlSignal[0] = 0; // or
+    // controlSignal[0] = 0; // slt
+    // controlSignal[0] = 0; // beq
+
+    // R - type
+    // control   [ OPOPOP| Funct]
+    controlSignal[0b000000100000] = 0b10010; // add 
+    controlSignal[0b000000100010] = 0b10010; // subtract
+    controlSignal[0b000000100100] = 0b10010; // And
+    controlSignal[0b000000100101] = 0b10001; // or
+    controlSignal[0b000000101010] = 0b10111; // Set on < (set on less then)
+  }
+  map<int, int> controlSignal;
   int memwrite(int addr, int val){mem[addr] = val & 0xffff;}
   int memread(int addr){
     return mem[addr/0x4];
@@ -112,72 +132,74 @@ public:
         offset = 0x00;
     // cout << "Processor is runing..." << endl;
     // for(int i=0;i<5;i++)cout << "---\t";cout << endl;
-    while(PC < INSMEM.size() + 3){
-      PC += ( 0x04 ) / 4;
+    while(CC < INSMEM.size() + 3){
+      CC += 0x01;
+      PC += 0x04;
       // cout << "PC: " << PC << "\t-\t";
-      for(int n = 0; n < 4 && n < PC; n++){
+      for(int n = 0; n < 4 && n < CC; n++){
         offset = 0x01;
-        int func = ((PC - n - 1) % 4);
-        int pc = PC - func - 1;
-        cout << "CC " << PC << ":\n\n";
+        int func = ((CC - n - 1) % 4);
+        int pc = CC - func - 1;
+        cout << "CC " << CC << ":\n\n";
         // cout << names[func] << " " << pc << ",\t";
         if(pc < INSMEM.size()){
 
-          cout << "Registers:\n";
-          for(int i=0; i < 10; i++)cout << "$" << i << ":" << reg[i] << endl;    cout << "\n";
+          // cout << "Registers:\n";
+          // for(int i=0; i < 10; i++)cout << "$" << i << ":" << reg[i] << endl;    cout << "\n";
 
-          cout << "Data memory:\n\n";
-          for(int i=0; i < 5; i++)cout << "0x" << hex << i << ":" << mem[i] << endl;    cout << "\n";
+          // cout << "Data memory:\n\n";
+          // for(int i=0; i < 5; i++)cout << "0x" << hex << i << ":" << mem[i] << endl;    cout << "\n";
           
           switch(func){
             case 0: // IF/ID
-              cout << "IF/ID :\n"
-                   << "PC\t\t" << ((PC/4 + 1) * 4) << "\n"
-                   << "Instruction\t" << INSMEM[pc].raw << "\n";
+              // cout << "IF/ID :\n"
+              //      << "PC\t\t" << ((CC/4 + 1) * 4) << "\n"
+              //      << "Instruction\t" << INSMEM[pc].raw << "\n";
+              offset = 0x00;
               if(pc-1>0){
                 ID(INSMEM[pc], INSMEM[pc-1]);
-                offset += OFFSET(INSMEM[pc]);
+                offset = OFFSET(INSMEM[pc]);
               }
+              PC += offset;
               if(pc + offset > -1 && pc + offset < trunk.size()){
-                INSMEM.push_back(trunk[pc + offset]);
+                INSMEM.push_back(trunk[( PC / 0x04 )]);
               }
             break;
             
             case 1: // ID/EX
-              cout << "ID/EX :\n"
-                   << "ReadData1\t" << "" << "\n"
-                   << "ReadData2\t" << "" << "\n"
-                   << "sign_ext\t" << "" << "\n"
-                   << "Rs" << INSMEM[pc].RS() << "\n"
-                   << "Rt" << INSMEM[pc].RT() << "\n"
-                   << "Rd" << INSMEM[pc].RD() << "\n"
-                   << "Control signals " << "000000000"
-                   << endl;
+              // cout << "ID/EX :\n"
+              //      << "ReadData1\t" << "" << "\n"
+              //      << "ReadData2\t" << "" << "\n"
+              //      << "sign_ext\t" << "" << "\n"
+              //      << "Rs" << INSMEM[pc].RS() << "\n"
+              //      << "Rt" << INSMEM[pc].RT() << "\n"
+              //      << "Rd" << INSMEM[pc].RD() << "\n"
+              //      << "Control signals " << "000000000"
+              //      << endl;
               if(pc < INSMEM.size())
                 EX(INSMEM[pc]);
             break;
             case 2: // EX/MEM
-              cout << "EX/MEM :\n"
-                   << "ALUout\t" << "" << "\n"
-                   << "WriteData\t" << "" << "\n"
-                   << "Rt/Rd\t" << "" << "\n"
-                   << "Control signals " << "00000"
-                   << endl;
+              // cout << "EX/MEM :\n"
+              //      << "ALUout\t" << "" << "\n"
+              //      << "WriteData\t" << "" << "\n"
+              //      << "Rt/Rd\t" << "" << "\n"
+              //      << "Control signals " << "00000"
+              //      << endl;
               if(pc < INSMEM.size())
                 MEM(INSMEM[pc]);
             break;
             
             case 3: // MEM/WB
-              cout << "MEM/WB :\n"
-                   << "ReadData\t" << "" << "\n"
-                   << "ALUout\t" << "" << "\n"
-                   << "Rt/Rd\t" << "" << "\n"
-                   << "Control signals " << "00"
-                   << endl;
+              // cout << "MEM/WB :\n"
+              //      << "ReadData\t" << "" << "\n"
+              //      << "ALUout\t" << "" << "\n"
+              //      << "Rt/Rd\t" << "" << "\n"
+              //      << "Control signals " << "00"
+              //      << endl;
               if(pc < INSMEM.size())
                 WB(INSMEM[pc]);
               // work done
-              // INSMEM.pop_front();
             break;
           
           }
@@ -185,7 +207,7 @@ public:
       }
 
 
-
+      // cout << "Program Counter: " << PC << endl;
 
       
       cout << "=================================================================\n";
@@ -200,7 +222,7 @@ public:
 private:
   vector<Instruction> trunk;
   deque<Instruction> INSMEM;
-  int PC = 0x0;
+  int PC = 0x0, CC = 0x0;
   int reg[10] = {
     0x0000, 0x0009, 0x0005, 0x0007, 0x0001,
     0x0002, 0x0003, 0x0004, 0x0005, 0x0006
@@ -220,13 +242,24 @@ private:
   int OFFSET(Instruction ins){
     // OPTYPE = 0 => R TYPE, = 1 => I TYPE, = 2 => J TYPE
     int op = ins.OP();
-    if(op==0x000100||op==0x000101){
+    if(op==0b000100||op==0b000101){
       return ins.IMMEDIATE();
     }
     return 0;
   }
   void EX(Instruction ins){ // execute
-
+    switch(ins.OP()){
+      case 0b000000:
+        switch(ins.FUNCT()){
+          case 0b100000:
+            cout << "ADD" << endl;
+          break;
+          case 0b100010:
+            cout << "SUB" << endl;
+          break;
+        }
+      break;
+    }
   }
   void MEM(Instruction ins){// Memory access
 
