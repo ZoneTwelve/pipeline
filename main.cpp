@@ -132,14 +132,13 @@ public:
     ALUop  = 0x00; 
     ALUout = 0x00; 
     offset = 0x04;
-    // cout << "Processor is runing..." << endl;
-    // for(int i=0;i<5;i++)cout << "---\t";cout << endl;
     while(CC < INSMEM.size() + 3){
 
       // Instruction Fetch
       if((PC+4)*8 - 1 < raw.length()){
-        string bin = raw.substr( PC, ( PC + 0x04 )*8);
+        string bin = raw.substr( PC * 8, 32 );
         Instruction newIns( bin );
+        cout << "Fetch: " << bin << endl;
         INSMEM.push_back(newIns);
       }
 
@@ -151,67 +150,31 @@ public:
         int func = ((CC - n - 1) % 4);
         int pc = CC - func - 1;
         cout << "CC " << CC << ":\n\n";
-        // cout << names[func] << " " << pc << ",\t";
         if(pc < INSMEM.size()){
-
-          // cout << "Registers:\n";
-          // for(int i=0; i < 10; i++)cout << "$" << i << ":" << reg[i] << endl;    cout << "\n";
-
-          // cout << "Data memory:\n\n";
-          // for(int i=0; i < 5; i++)cout << "0x" << hex << i << ":" << mem[i] << endl;    cout << "\n";
-          
           switch(func){
             case 0: // IF/ID
-              // cout << "IF/ID :\n"
-              //      << "PC\t\t" << ((CC/4 + 1) * 4) << "\n"
-              //      << "Instruction\t" << INSMEM[pc].raw << "\n";
               ID(INSMEM[pc]);
             break;
             
             case 1: // ID/EX
-              // cout << "ID/EX :\n"
-              //      << "ReadData1\t" << "" << "\n"
-              //      << "ReadData2\t" << "" << "\n"
-              //      << "sign_ext\t" << "" << "\n"
-              //      << "Rs" << INSMEM[pc].RS() << "\n"
-              //      << "Rt" << INSMEM[pc].RT() << "\n"
-              //      << "Rd" << INSMEM[pc].RD() << "\n"
-              //      << "Control signals " << "000000000"
-              //      << endl;
               if(pc < INSMEM.size())
                 EX(INSMEM[pc]);
             break;
             case 2: // EX/MEM
-              // cout << "EX/MEM :\n"
-              //      << "ALUout\t" << "" << "\n"
-              //      << "WriteData\t" << "" << "\n"
-              //      << "Rt/Rd\t" << "" << "\n"
-              //      << "Control signals " << "00000"
-              //      << endl;
               if(pc < INSMEM.size())
                 MEM(INSMEM[pc]);
             break;
             
             case 3: // MEM/WB
-              // cout << "MEM/WB :\n"
-              //      << "ReadData\t" << "" << "\n"
-              //      << "ALUout\t" << "" << "\n"
-              //      << "Rt/Rd\t" << "" << "\n"
-              //      << "Control signals " << "00"
-              //      << endl;
               if(pc < INSMEM.size())
                 WB(INSMEM[pc]);
-              // work done
+              // work done, try to remove instruction from INSMEM
             break;
           
           }
         }
       }
 
-
-      // cout << "Program Counter: " << PC << endl;
-
-      
       cout << "=================================================================\n";
     }
   }
@@ -241,11 +204,11 @@ private:
     0x0005, 0x0009, 0x0004, 0x0008, 0x0007
   }; // memory
 
-  void ID(Instruction cur, Instruction pre){ // Instruction decode
-    int res = pre.RT()==cur.RS()?1:0 +  // update(rs=1, data)
-              pre.RT()==cur.RD()?2:0;   // update(rd=2, data)
-    if(res>0)cur.update(3, res); // update readFromALU Status
-    else cur.update(3, -1);
+  void ID(Instruction ins){ // Instruction decode
+    // int res = pre.RT()==cur.RS()?1:0 +  // update(rs=1, data)
+    //           pre.RT()==cur.RD()?2:0;   // update(rd=2, data)
+    // if(res>0)cur.update(3, res); // update readFromALU Status
+    // else cur.update(3, -1);
   }
 
   int OFFSET(Instruction ins){
@@ -257,16 +220,9 @@ private:
     return 0;
   }
   void EX(Instruction ins){ // execute
-    switch(ins.OP()){
-      case 0b000000:
-        switch(ins.FUNCT()){
-          case 0b100000:
-            cout << "ADD" << endl;
-          break;
-          case 0b100010:
-            cout << "SUB" << endl;
-          break;
-        }
+    switch((ins.OP()<<6) + ins.FUNCT()){
+      case 0b000000100000: // I type add
+        cout << "I type add" << endl;
       break;
     }
   }
