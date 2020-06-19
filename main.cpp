@@ -128,13 +128,23 @@ public:
     return mem[addr/0x4];
   }
   void run(){
-    int ALUout = 0x00, 
-        offset = 0x00;
+    PC = 0x0; CC = 0x0;
+    ALUop  = 0x00; 
+    ALUout = 0x00; 
+    offset = 0x04;
     // cout << "Processor is runing..." << endl;
     // for(int i=0;i<5;i++)cout << "---\t";cout << endl;
     while(CC < INSMEM.size() + 3){
+
+      // Instruction Fetch
+      if((PC+4)*8 - 1 < raw.length()){
+        string bin = raw.substr( PC, ( PC + 0x04 )*8);
+        Instruction newIns( bin );
+        INSMEM.push_back(newIns);
+      }
+
       CC += 0x01;
-      PC += 0x04;
+      PC += offset;
       // cout << "PC: " << PC << "\t-\t";
       for(int n = 0; n < 4 && n < CC; n++){
         offset = 0x01;
@@ -155,15 +165,7 @@ public:
               // cout << "IF/ID :\n"
               //      << "PC\t\t" << ((CC/4 + 1) * 4) << "\n"
               //      << "Instruction\t" << INSMEM[pc].raw << "\n";
-              offset = 0x00;
-              if(pc-1>0){
-                ID(INSMEM[pc], INSMEM[pc-1]);
-                offset = OFFSET(INSMEM[pc]);
-              }
-              PC += offset;
-              if(pc + offset > -1 && pc + offset < trunk.size()){
-                INSMEM.push_back(trunk[( PC / 0x04 )]);
-              }
+              ID(INSMEM[pc]);
             break;
             
             case 1: // ID/EX
@@ -213,6 +215,9 @@ public:
       cout << "=================================================================\n";
     }
   }
+  void loadBinary(string bin){
+    raw = bin;
+  }
   void addIntruction(Instruction ins){
     // INSMEM.push_back(ins);
     trunk.push_back(ins);
@@ -220,9 +225,13 @@ public:
       INSMEM.push_back(ins);
   }
 private:
+  string raw;
+  int PC = 0x0, CC = 0x0;
+  int ALUop  = 0x00;
+  int ALUout = 0x00, 
+      offset = 0x04;
   vector<Instruction> trunk;
   deque<Instruction> INSMEM;
-  int PC = 0x0, CC = 0x0;
   int reg[10] = {
     0x0000, 0x0009, 0x0005, 0x0007, 0x0001,
     0x0002, 0x0003, 0x0004, 0x0005, 0x0006
@@ -276,18 +285,14 @@ int main(){
   char infile[5][20] = {"SampleInput.txt", "General.txt", "Datahazard.txt", "Lwhazard.txt", "Branchhazard.txt"};
   for(int n=0;n<FC;n++){
     ifstream input(infile[n]);
-    string binary;
+    string binary, raw;
     processor computer;
 
-    // for(int i=0;i<n+1;i++){
-    //   Instruction ins("10001101000000010000000000000011");
-    //   computer.addIntruction(ins);
-    // }
     while(getline(input, binary)){
-      Instruction ins(binary);
-      computer.addIntruction(ins);
+      raw+=binary;
     }
 
+    computer.loadBinary(raw);
     computer.run(); 
 
     // for(int i=0;i<5;i++)cout << "===\t";cout << endl;
