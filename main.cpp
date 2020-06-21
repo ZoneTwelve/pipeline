@@ -5,11 +5,13 @@
 #include <vector>
 #include <deque>
 #include <map>
+#include <bitset>
 using namespace std;
 
 int iTypeLen = 11;
 int iTypeCode[11] = {4, 5, 8, 9, 12, 13, 10, 11, 15, 35, 43};
 int min(int a, int b){return a>b?b:a;}
+string sg(string a, int len){string r="";while(len-->0)r+=a;return r;}
 bool findAt(int target, int array[], int len){
   for(int i=0;i<len;i++)if(array[i]==target)return true;
   return false;
@@ -53,22 +55,26 @@ public:
     // cout << binary << endl;
     raw = binary;
     op = bin2int(binary.substr(0, 6));
-    if(op==0){ // R type
-      type = 0; // R type = 0
+    if(op==0)
+      type = 0; // R
+    else
+      type = 1; // I
+    // if(op==0){ // R type
+      // type = 0; // R type = 0
       rs = bin2int(binary.substr(6, 5));
       rt = bin2int(binary.substr(11, 5));
       rd = bin2int(binary.substr(16, 5));
       shamt = bin2int(binary.substr(21, 5));
       funct = bin2int(binary.substr(26, 6));
-    }else if(findAt(op, iTypeCode, iTypeLen)){ // I type
-      type = 1; // I type = 1
-      rs = bin2int(binary.substr(6, 5));
-      rt = bin2int(binary.substr(11, 5));
+    // }else if(findAt(op, iTypeCode, iTypeLen)){ // I type
+      // type = 1; // I type = 1
+      // rs = bin2int(binary.substr(6, 5));
+      // rt = bin2int(binary.substr(11, 5));
       immediate = bin2int(binary.substr(16, 16));
-    }else{ // J type
-      type = 2; // J type = 2
-      immediate = bin2int(binary.substr(6, 26));
-    }
+    // }else{ // J type
+      // type = 2; // J type = 2
+      // immediate = bin2int(binary.substr(6, 26));
+    // }
     // cout << "OP: " << op << endl;
   }
   int RS(){return rs;}
@@ -107,65 +113,64 @@ string names[4] = {"ID", "EX", "ME", "WB"};
 class processor{
 public:
   processor(){
-    // I - type
-    controlSignal[0b001100000000] = 0b11000; // and
-    controlSignal[0b001000000000] = 0b00010; // add 
-    // controlSignal[0] = 0; // or
-    // controlSignal[0] = 0; // slt
-    // controlSignal[0] = 0; // beq
-
-    // R - type
-    // control   [ OPOPOP| Funct]
-    controlSignal[0b000000100000] = 0b10010; // add 
-    controlSignal[0b000000100010] = 0b10010; // subtract
-    controlSignal[0b000000100100] = 0b10010; // And
-    controlSignal[0b000000100101] = 0b10001; // or
-    controlSignal[0b000000101010] = 0b10111; // Set on < (set on less then)
+    //R type             |functi      CtrExecMemWb
+    controlSignal[0b000000100000] = 0b010110000010; // add
+    controlSignal[0b000000100010] = 0b110110000010; // sub
+    controlSignal[0b000000100100] = 0b000110000010; // and
+    controlSignal[0b000000100101] = 0b001110000010; // or
+    controlSignal[0b000000101010] = 0b111110000010; // slt
+    //I type        operan|           CtrExecMemWb
+    controlSignal[0b001000000000] = 0b010000100010; // addi
+    controlSignal[0b001100000000] = 0b000011100010; // andi
+    controlSignal[0b100001000000] = 0b010000101011; // lw
+    controlSignal[0b100001000000] = 0b010000100100; // sw
+    controlSignal[0b100001000000] = 0b110001010000; // beq
   }
   map<int, int> controlSignal;
-  int memwrite(int addr, int val){mem[addr] = val & 0xffff;}
+  void memwrite(int addr, int val){mem[addr] = val & 0xffff;}
   int memread(int addr){
     return mem[addr/0x4];
   }
   void run(){
+    int binlen = raw.length();
     PC = 0x0; CC = 0x0;
     ALUop  = 0x00; 
     ALUout = 0x00; 
-    offset = 0x04;
-    while(CC < INSMEM.size() + 3){
+    offset = 0x00;
 
+    while(CC < INSMEM.size() + 4){//CC < INSMEM.size() + 3
       // Instruction Fetch
-      if((PC+4)*8 - 1 < raw.length()){
+      if((PC+4)*8 - 1 < binlen){ // Simulate real processor reading instruction
         string bin = raw.substr( PC * 8, 32 );
         Instruction newIns( bin );
-        cout << "Fetch: " << bin << endl;
         INSMEM.push_back(newIns);
       }
 
-      CC += 0x01;
-      PC += offset;
-      // cout << "PC: " << PC << "\t-\t";
+      CC += 0x01; // next Clock cycle
+      PC += 0x04; // default PC + 4
       for(int n = 0; n < 4 && n < CC; n++){
-        offset = 0x01;
         int func = ((CC - n - 1) % 4);
         int pc = CC - func - 1;
-        cout << "CC " << CC << ":\n\n";
         if(pc < INSMEM.size()){
           switch(func){
             case 0: // IF/ID
+              // cout << "IFID: " << INSMEM.size() << ", " << pc << endl;
               ID(INSMEM[pc]);
             break;
             
             case 1: // ID/EX
+              // cout << "IDEX: " << INSMEM.size() << ", " << pc << endl;
               if(pc < INSMEM.size())
                 EX(INSMEM[pc]);
             break;
             case 2: // EX/MEM
+              // cout << "EXMEM: " << INSMEM.size() << ", " << pc << endl;
               if(pc < INSMEM.size())
                 MEM(INSMEM[pc]);
             break;
             
             case 3: // MEM/WB
+              // cout << "MEMWB: " << INSMEM.size() << ", " << pc << endl;
               if(pc < INSMEM.size())
                 WB(INSMEM[pc]);
               // work done, try to remove instruction from INSMEM
@@ -174,6 +179,50 @@ public:
           }
         }
       }
+      PC += offset;
+
+      cout << "CC " << CC << ":\n";
+      cout << "Registers:\n";
+      for(int i=0;i<10;i++)cout << "$" << i << ": " << reg[i] << endl;
+      cout << endl;
+
+      cout << "Data memory:\n";
+      for(int i=0;i<5;i++)cout << "$" << i << ": " << mem[i] << endl;
+      cout << endl;
+
+      cout << "IF/ID :\n";
+      cout << "PC\t\t" << PC << endl;
+      cout << "Instruction\t" << ( (CC-1==0)?( INSMEM[CC - 1].raw ):sg("0", 32) ) << endl;
+      cout << endl;
+
+      cout << "ID/EX :\n"
+            << "ReadData1\t" << ( (CC-2==0)?( reg[INSMEM[CC - 2].RS()] ):0 ) << "\n"
+            << "ReadData2\t" << ( (CC-2==0)?( reg[INSMEM[CC - 2].RT()] ):0 ) << "\n"
+            << "sign_ext\t" << INSMEM[CC - 2].IMMEDIATE() << "\n"
+            << "Rs\t" << ( (CC-2==0)?( INSMEM[CC - 2].RS() ):0 ) << "\n"
+            << "Rt\t" << ( (CC-2==0)?( INSMEM[CC - 2].RT() ):0 ) << "\n"
+            << "Rd\t" << ( (CC-2==0)?( INSMEM[CC - 2].RD() ):0 ) << "\n"
+            << "Control signals " << sg("0", 9)
+            << endl;
+      cout << endl;
+
+
+      cout << "EX/MEM :\n"
+            << "ALUout\t" << "" << "\n"
+            << "WriteData\t" << "" << "\n"
+            << "Rt/Rd\t" << "" << "\n"
+            << "Control signals " << sg("0", 5)
+            << endl;
+      cout << endl;
+
+
+      cout << "MEM/WB :\n"
+           << "ReadData\t" << "" << "\n"
+           << "ALUout\t" << "" << "\n"
+           << "Rt/Rd\t" << "" << "\n"
+           << "Control signals " << sg("0", 2)
+           << endl;
+      cout << endl;
 
       cout << "=================================================================\n";
     }
@@ -194,7 +243,7 @@ private:
   int ALUout = 0x00, 
       offset = 0x04;
   vector<Instruction> trunk;
-  deque<Instruction> INSMEM;
+  vector<Instruction> INSMEM;
   int reg[10] = {
     0x0000, 0x0009, 0x0005, 0x0007, 0x0001,
     0x0002, 0x0003, 0x0004, 0x0005, 0x0006
@@ -205,10 +254,10 @@ private:
   }; // memory
 
   void ID(Instruction ins){ // Instruction decode
-    // int res = pre.RT()==cur.RS()?1:0 +  // update(rs=1, data)
-    //           pre.RT()==cur.RD()?2:0;   // update(rd=2, data)
-    // if(res>0)cur.update(3, res); // update readFromALU Status
-    // else cur.update(3, -1);
+    // if( branch )
+      // offset = branch offset
+    
+    offset = 0x00;
   }
 
   int OFFSET(Instruction ins){
@@ -220,17 +269,45 @@ private:
     return 0;
   }
   void EX(Instruction ins){ // execute
-    switch((ins.OP()<<6) + ins.FUNCT()){
-      case 0b000000100000: // I type add
-        cout << "I type add" << endl;
-      break;
+    int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
+    int ctr = controlSignal[op+func];
+    int ALUctr   = (ctr >> 9);
+    int EACstage = (ctr & 0b111100000) >> 5;
+    int MAstage  = (ctr & 0xfff00) >> 2;
+    int RegDst = EACstage & 0b1000 >> 3,
+        ALUop1 = EACstage & 0b0100 >> 2,
+        ALUop0 = EACstage & 0b0010 >> 1,
+        ALUsrc = EACstage & 0b0001;
+    // int MAstage  = (ctr & 0xfff00) >> 2;
+    // int WBstage  = (ctr & 0xff);
+    int d1 = reg[ins.RS()], d2 = (ALUctr==0?reg[ins.RT()]:ins.IMMEDIATE());
+    switch(ALUctr){
+      case 0b000: ALUout = d1 & d2; break; // and
+      case 0b010: ALUout = d1 + d2; break; // add
+      case 0b110: ALUout = d1 - d2; break; // sub
+      case 0b001: ALUout = d1 | d2; break; // or
+      case 0b111: ALUout = d1 < d2 ? 1 : 0; break; // Set on less then
     }
+
+    if(( MAstage & 0b100 ) >> 2 == 1)
+      offset += ins.IMMEDIATE() * 4;
   }
   void MEM(Instruction ins){// Memory access
+    int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
+    int ctr = controlSignal[op+func];
+    int MAstage  = (ctr & 0xfff00) >> 2;
 
+    if(MAstage & 0b10 >> 1){
+
+    }
+    if(MAstage & 0b01){
+      
+    }
   }
   void WB(Instruction ins){ // write back
-
+    int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
+    int ctr = controlSignal[op+func];
+    int WBstage  = (ctr & 0xff);
   }
 };
 //[lw], [sw], [add], [addi], [sub], [and], [andi], [or], [slt], [beq]
