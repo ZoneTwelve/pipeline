@@ -8,6 +8,8 @@
 #include <bitset>
 using namespace std;
 
+ofstream output;
+
 int iTypeLen = 11;
 int iTypeCode[11] = {4, 5, 8, 9, 12, 13, 10, 11, 15, 35, 43};
 int min(int a, int b){return a>b?b:a;}
@@ -77,6 +79,8 @@ public:
     // }
     // cout << "OP: " << op << endl;
   }
+
+  // read private variabel zone
   int RS(){return rs;}
   int RT(){return rt;}
   int RD(){return rd;}
@@ -85,6 +89,9 @@ public:
   int FUNCT(){return funct;}
   int IMMEDIATE(){return immediate;}
   int RALUS(){return readFromALU;}
+  // read private variabel zone
+
+  // dont need
   int update(int t, int data){
     int fin = 1;
     switch(t){
@@ -114,6 +121,7 @@ class processor{
 public:
   processor(){
     //R type             |functi      CtrExecMemWb
+    controlSignal[0b000000000000] = 0b000000000000; // add
     controlSignal[0b000000100000] = 0b010110000010; // add
     controlSignal[0b000000100010] = 0b110110000010; // sub
     controlSignal[0b000000100100] = 0b000110000010; // and
@@ -148,9 +156,9 @@ public:
 
       CC += 0x01; // next Clock cycle
       PC += 0x04; // default PC + 4
-      for(int n = 0; n < 4 && n < CC; n++){
-        int func = ((CC - n - 1) % 4);
-        int pc = CC - func - 1;
+      for(int n = 0; n < 4 && n < CC; n++){ // loop for runing ID, EX, MEM, WB
+        int func = ((CC - n - 1) % 4); // Read Stage
+        int pc = CC - func - 1;        // read ins from INSMEM
         if(pc < INSMEM.size()){
           switch(func){
             case 0: // IF/ID
@@ -173,7 +181,7 @@ public:
               // cout << "MEMWB: " << INSMEM.size() << ", " << pc << endl;
               if(pc < INSMEM.size())
                 WB(INSMEM[pc]);
-              // work done, try to remove instruction from INSMEM
+              // feature" work done, try to remove instruction from INSMEM
             break;
           
           }
@@ -181,50 +189,71 @@ public:
       }
       PC += offset;
 
-      cout << "CC " << CC << ":\n";
-      cout << "Registers:\n";
-      for(int i=0;i<10;i++)cout << "$" << i << ": " << reg[i] << endl;
-      cout << endl;
+      output << "CC " << CC << ":\n\n";
+      output << "Registers:\n";
+      for(int i=0;i<10;i++)output << "$" << i << ": " << reg[i] << endl;
+      output << endl;
 
-      cout << "Data memory:\n";
-      for(int i=0;i<5;i++)cout << "$" << i << ": " << mem[i] << endl;
-      cout << endl;
+      output << "Data memory:\n";
+      for(int i=0;i<5;i++)output << "$" << i << ": " << mem[i] << endl;
+      output << endl;
 
-      cout << "IF/ID :\n";
-      cout << "PC\t\t" << PC << endl;
-      cout << "Instruction\t" << ( (CC-1==0)?( INSMEM[CC - 1].raw ):sg("0", 32) ) << endl;
-      cout << endl;
+      output << "IF/ID :\n";
+      output << "PC\t\t" << PC << endl;
+      output << "Instruction\t" << ( (CC-1==0)?( INSMEM[CC - 1].raw ):sg("0", 32) ) << endl;
+      output << endl;
 
-      cout << "ID/EX :\n"
+      // int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
+      // int ctr = controlSignal[op+func];
+      Instruction EXins(sg("0", 32));
+      if(CC-2==0){
+        EXins = INSMEM[CC - 2];
+      }
+      // Instruction EXins = ( (CC-2==0)?( INSMEM[CC - 2] ):emptyIns );
+      int EXsignal = (EXins.OP() << 6 ) + EXins.FUNCT() & (EXins.OP()==0?0b111111:0b000000);
+      int EXctr = controlSignal[EXsignal] & 0b000111111111;
+      output << "ID/EX :\n"
             << "ReadData1\t" << ( (CC-2==0)?( reg[INSMEM[CC - 2].RS()] ):0 ) << "\n"
             << "ReadData2\t" << ( (CC-2==0)?( reg[INSMEM[CC - 2].RT()] ):0 ) << "\n"
             << "sign_ext\t" << INSMEM[CC - 2].IMMEDIATE() << "\n"
             << "Rs\t" << ( (CC-2==0)?( INSMEM[CC - 2].RS() ):0 ) << "\n"
             << "Rt\t" << ( (CC-2==0)?( INSMEM[CC - 2].RT() ):0 ) << "\n"
             << "Rd\t" << ( (CC-2==0)?( INSMEM[CC - 2].RD() ):0 ) << "\n"
-            << "Control signals " << sg("0", 9)
+            << "Control signals " <<  std::bitset<9>(EXctr)//sg("0", 9)
             << endl;
-      cout << endl;
+      output << endl;
 
 
-      cout << "EX/MEM :\n"
-            << "ALUout\t" << "" << "\n"
+      Instruction MEMins(sg("0", 32));// = ( (CC-3==0)?( INSMEM[CC - 3] ):emptyIns );
+      if(CC-3==0){
+        EXins = INSMEM[CC - 3];
+      }
+      int MEMsignal = (MEMins.OP() << 6 ) + MEMins.FUNCT() & (MEMins.OP()==0?0b111111:0b000000);
+      int MEMctr = controlSignal[MEMsignal] & 0b000000011111;
+      output << "EX/MEM :\n"
+            << "ALUout\t" << ALUout << "\n"
             << "WriteData\t" << "" << "\n"
             << "Rt/Rd\t" << "" << "\n"
             << "Control signals " << sg("0", 5)
             << endl;
-      cout << endl;
+      output << endl;
 
 
-      cout << "MEM/WB :\n"
+      Instruction WBins(sg("0", 32));// = ( (CC-4==0)?( INSMEM[CC - 4] ):emptyIns );
+      if(CC-4==0){
+        WBins = INSMEM[CC - 4];
+      }
+      int WBsignal = (WBins.OP() << 6 ) + WBins.FUNCT() & (WBins.OP()==0?0b111111:0b000000);
+      int WBctr = controlSignal[WBsignal] & 0b000000000011;
+      output << "MEM/WB :\n"
            << "ReadData\t" << "" << "\n"
            << "ALUout\t" << "" << "\n"
            << "Rt/Rd\t" << "" << "\n"
-           << "Control signals " << sg("0", 2)
+           << "Control signals " << sg("0", 2)//std::bitset<5>(WBctr)
            << endl;
-      cout << endl;
+      output << endl;
 
-      cout << "=================================================================\n";
+      output << "=================================================================\n";
     }
   }
   void loadBinary(string bin){
@@ -240,8 +269,12 @@ private:
   string raw;
   int PC = 0x0, CC = 0x0;
   int ALUop  = 0x00;
-  int ALUout = 0x00, 
+  int ALUout = 0x00, dst = 0x00,
       offset = 0x04;
+  
+  int WriteData = 0x00,
+      EXMEMRtRd = 0x00,
+      WBRtRd    = 0x00;
   vector<Instruction> trunk;
   vector<Instruction> INSMEM;
   int reg[10] = {
@@ -273,7 +306,7 @@ private:
     int ctr = controlSignal[op+func];
     int ALUctr   = (ctr >> 9);
     int EACstage = (ctr & 0b111100000) >> 5;
-    int MAstage  = (ctr & 0xfff00) >> 2;
+    int MAstage  = (ctr & 0b11100) >> 2;
     int RegDst = EACstage & 0b1000 >> 3,
         ALUop1 = EACstage & 0b0100 >> 2,
         ALUop0 = EACstage & 0b0010 >> 1,
@@ -295,38 +328,46 @@ private:
   void MEM(Instruction ins){// Memory access
     int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
     int ctr = controlSignal[op+func];
-    int MAstage  = (ctr & 0xfff00) >> 2;
-
-    if(MAstage & 0b10 >> 1){
-
+    int MAstage  = (ctr & 0b1100) >> 2;
+    if(MAstage & 0b10 >> 1){ // mem read
+      dst = mem[ALUout];
     }
-    if(MAstage & 0b01){
-      
+    if(MAstage & 0b01){ // mem write
+      mem[ins.RT()] = ALUout;
     }
   }
   void WB(Instruction ins){ // write back
     int op = (ins.OP() << 6 ), func = ins.FUNCT() & (op==0?0b111111:0b000000);
     int ctr = controlSignal[op+func];
-    int WBstage  = (ctr & 0xff);
+    int WBstage  = (ctr & 0b11);
+    int MAstage  = (ctr & 0b1100) >> 2;
+    if(MAstage & 0b10 >> 1){ // mem read
+      reg[ins.RT()] = dst;
+    }
   }
 };
 //[lw], [sw], [add], [addi], [sub], [and], [andi], [or], [slt], [beq]
 //, , , , , P, B, z[data hazard], [hazard with load], [branchhazard]
-
+Instruction emptyIns(sg("0", 32));
 int main(){
-  const int FC = 1;
+  const int FC = 5;
   char infile[5][20] = {"SampleInput.txt", "General.txt", "Datahazard.txt", "Lwhazard.txt", "Branchhazard.txt"};
+  char outfile[5][50] = {"MySampleOutput.txt", "GeneralOutput.txt", "DatahazardOutput.txt", "Lwhazard.txt", "BranchhazardOutput.txt"};
   for(int n=0;n<FC;n++){
     ifstream input(infile[n]);
     string binary, raw;
     processor computer;
+    // myfile << "Writing this to a file.\n";
 
     while(getline(input, binary)){
       raw+=binary;
     }
 
     computer.loadBinary(raw);
+
+    output.open(outfile[n]);
     computer.run(); 
+    output.close();
 
     // for(int i=0;i<5;i++)cout << "===\t";cout << endl;
   }
